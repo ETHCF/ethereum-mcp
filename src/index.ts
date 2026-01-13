@@ -1486,7 +1486,7 @@ server.tool(
 );
 
 // Ecosystem Pro
-server.tool('get_categories', 'Get DeFi protocol categories and their TVL (Pro)', {}, async () => {
+server.tool('dl_get_categories', 'Get DeFi protocol categories and their TVL (Pro)', {}, async () => {
   const data = await defillama.getCategories();
   if (!data || Object.keys(data).length === 0) {
     return {
@@ -1983,8 +1983,8 @@ server.tool(
 );
 
 server.tool(
-  'get_coin_chart',
-  'Get price chart data for a token over time',
+  'dl_get_coin_chart',
+  'Get price chart data for a token over time (via DefiLlama)',
   {
     coins: z.string().describe('Coin in format "chain:address" (e.g., "ethereum:0x...")'),
     period: z.string().optional().describe("Time period: '1d', '1w', '1m', '1y' (default: 1w)"),
@@ -2047,7 +2047,7 @@ server.tool(
 );
 
 server.tool(
-  'get_block_by_timestamp',
+  'dl_get_block_by_timestamp',
   'Get block number closest to a timestamp (via DefiLlama)',
   {
     chain: z.string().describe("Chain name (e.g., 'ethereum', 'bsc', 'polygon')"),
