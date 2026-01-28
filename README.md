@@ -20,6 +20,18 @@ Claude will handle everything.
 
 ---
 
+### Using OpenAI Codex?
+
+Paste this into Codex:
+
+```
+Install the Ethereum MCP from github.com/ETHCF/ethereum-mcp and configure it for me.  Edit ~/.codex/config.toml directly. Etherscan API key is "<key>".
+```
+
+Codex will handle everything.
+
+---
+
 ### Using Terminal?
 
 Run this one command:
