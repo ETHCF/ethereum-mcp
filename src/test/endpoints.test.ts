@@ -11,6 +11,7 @@
  */
 
 import * as etherscan from '../adapters/etherscan.js';
+import * as jsonrpc from '../adapters/jsonrpc.js';
 import * as defillama from '../adapters/defillama.js';
 import * as coingecko from '../adapters/coingecko.js';
 import * as growthepie from '../adapters/growthepie.js';
@@ -246,11 +247,100 @@ async function testDune(): Promise<void> {
 }
 
 // ============================================
+// JSON-RPC TESTS
+// ============================================
+async function testJsonRpc(): Promise<void> {
+  console.log('\n[7] JSON-RPC');
+
+  if (!process.env.ETH_NODE_URL) {
+    console.log('  [SKIP] Skipped - ETH_NODE_URL not set');
+    return;
+  }
+
+  // Validation tests (run before setNodeUrl since they don't need a live node)
+  await runTest('setNodeUrl rejects bad URL', 'jsonrpc', async () => {
+    try {
+      await jsonrpc.setNodeUrl('not-a-url');
+      return false; // Should have thrown
+    } catch (e: any) {
+      return e.message.includes('Invalid URL') ? true : false;
+    }
+  }, (r) => r === true);
+
+  await runTest('setNodeUrl rejects unreachable node', 'jsonrpc', async () => {
+    try {
+      await jsonrpc.setNodeUrl('http://localhost:1');
+      return false; // Should have thrown
+    } catch {
+      return true;
+    }
+  }, (r) => r === true);
+
+  // Connect to the real node
+  await runTest('setNodeUrl validates and detects chain', 'jsonrpc', async () => {
+    const result = await jsonrpc.setNodeUrl(process.env.ETH_NODE_URL!);
+    return result;
+  }, (r) => r && r.chainId && r.blockNumber > 0);
+
+  // Input validation tests
+  await runTest('getBalance rejects invalid address', 'jsonrpc', async () => {
+    try {
+      await jsonrpc.getBalance('not-an-address');
+      return false;
+    } catch (e: any) {
+      return e.message.includes('Invalid address') ? true : false;
+    }
+  }, (r) => r === true);
+
+  await runTest('getLogs rejects huge block range', 'jsonrpc', async () => {
+    try {
+      await jsonrpc.getLogs(TEST_CONTRACT, 0, 20000);
+      return false;
+    } catch (e: any) {
+      return e.message.includes('Block range too large') ? true : false;
+    }
+  }, (r) => r === true);
+
+  // Standard API tests
+  await runTest('getBalance', 'jsonrpc', () => jsonrpc.getBalance(TEST_ADDRESS));
+  await runTest('getBlockNumber', 'jsonrpc', () => jsonrpc.getBlockNumber(), (r) => r > 0);
+  await runTest('getBlockByNumber', 'jsonrpc', () => jsonrpc.getBlockByNumber(TEST_BLOCK));
+  await runTest('getTransactionByHash', 'jsonrpc', () =>
+    jsonrpc.getTransactionByHash(TEST_TX_HASH)
+  );
+  await runTest('getTransactionReceipt', 'jsonrpc', () =>
+    jsonrpc.getTransactionReceipt(TEST_TX_HASH)
+  );
+  await runTest('ethCall', 'jsonrpc', () =>
+    jsonrpc.ethCall(TEST_CONTRACT, '0x18160ddd')
+  );
+  await runTest('getCode', 'jsonrpc', () => jsonrpc.getCode(TEST_CONTRACT));
+  await runTest('getStorageAt', 'jsonrpc', () =>
+    jsonrpc.getStorageAt(TEST_CONTRACT, '0x0')
+  );
+  await runTest('estimateGas', 'jsonrpc', () =>
+    jsonrpc.estimateGas(TEST_CONTRACT, '0x18160ddd')
+  );
+  await runTest('getGasPrice', 'jsonrpc', () => jsonrpc.getGasPrice(), (r) => r.SafeGasPrice);
+  await runTest('getGasPriceRaw', 'jsonrpc', () => jsonrpc.getGasPriceRaw());
+  await runTest('getLogs', 'jsonrpc', () =>
+    jsonrpc.getLogs(TEST_CONTRACT, TEST_BLOCK, TEST_BLOCK + 10)
+  );
+  await runTest('getTransactionCount', 'jsonrpc', () =>
+    jsonrpc.getTransactionCount(TEST_ADDRESS), (r) => r >= 0
+  );
+  await runTest('getBalanceMulti', 'jsonrpc', () =>
+    jsonrpc.getBalanceMulti([TEST_ADDRESS, TEST_CONTRACT]),
+    (r) => Array.isArray(r) && r.length === 2
+  );
+}
+
+// ============================================
 // ROUTER TESTS (Smart routing with fallbacks)
 // ============================================
 
 async function testRouter(): Promise<void> {
-  console.log('\n[7] ROUTER (Smart Fallbacks)');
+  console.log('\n[8] ROUTER (Smart Fallbacks)');
 
   // ETH Price with fallbacks
   await runTest(
@@ -310,6 +400,7 @@ async function main(): Promise<void> {
   console.log('===========================================================');
   console.log(`  Time: ${new Date().toISOString()}`);
   console.log(`  Etherscan Key: ${process.env.ETHERSCAN_API_KEY ? '[OK]' : '[FAIL]'}`);
+  console.log(`  JSON-RPC Node: ${process.env.ETH_NODE_URL ? '[OK]' : '[SKIP]'}`);
   console.log(`  DefiLlama Pro: ${process.env.DEFILLAMA_PRO_KEY ? '[OK]' : '[FAIL]'}`);
   console.log(`  CoinGecko Pro: ${process.env.COINGECKO_API_KEY ? '[OK]' : '[FAIL]'}`);
   console.log(`  Dune Key: ${process.env.DUNE_API_KEY ? '[OK]' : '[FAIL]'}`);
@@ -323,6 +414,7 @@ async function main(): Promise<void> {
   await testGrowthepie();
   await testBlobscan();
   await testDune();
+  await testJsonRpc();
   await testRouter();
 
   const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);

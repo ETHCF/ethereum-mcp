@@ -5,3 +5,6 @@ dist/
 node_modules/
 .mcp.json
 .claude/
+.wrangler/
+000/
+spec-output.md
