@@ -9,6 +9,7 @@
  */
 
 import * as etherscan from '../adapters/etherscan.js';
+import * as jsonrpc from '../adapters/jsonrpc.js';
 import * as defillama from '../adapters/defillama.js';
 import * as coingecko from '../adapters/coingecko.js';
 import * as growthepie from '../adapters/growthepie.js';
@@ -273,7 +274,7 @@ export async function getTokenPrice(
               eth: 'coingecko:ethereum',
               usdc: 'ethereum:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
               usdt: 'ethereum:0xdAC17F958D2ee523a2206206994597C13D831ec7',
-              dai: 'ethereum:0x6B175474E89094C44Da98b954EesadadcD732172601',
+              dai: 'ethereum:0x6B175474E89094C44Da98b954EedeAC495271d0F',
             };
             const key = mappings[token.toLowerCase()] || `coingecko:${token.toLowerCase()}`;
             const data = await defillama.getCoinPrices(key);
@@ -413,6 +414,232 @@ export async function getBlobStats(): Promise<BlobStatsResult> {
 }
 
 // ============================================
+// ON-CHAIN ROUTING (JSON-RPC primary, Etherscan fallback)
+// ============================================
+
+export interface OnChainResult<T> {
+  result: T;
+  source: string;
+}
+
+function onChainSources<T>(
+  jsonrpcFn: () => Promise<T>,
+  etherscanFn: () => Promise<T>,
+  requestedChain?: string
+): Array<{ name: string; fn: () => Promise<T> }> {
+  const sources: Array<{ name: string; fn: () => Promise<T> }> = [];
+
+  if (jsonrpc.isConfigured()) {
+    let includeJsonRpc = true;
+
+    if (requestedChain) {
+      try {
+        const requestedChainId = etherscan.getChainId(requestedChain);
+        const nodeChainId = jsonrpc.getNodeChainId();
+        if (nodeChainId && requestedChainId !== nodeChainId) {
+          includeJsonRpc = false;
+        }
+      } catch {
+        // Unknown chain name -- skip JSON-RPC, let Etherscan handle it
+        includeJsonRpc = false;
+      }
+    }
+
+    if (includeJsonRpc) {
+      sources.push({ name: 'JSON-RPC', fn: jsonrpcFn });
+    }
+  }
+
+  if (etherscan.isConfigured()) {
+    sources.push({ name: 'Etherscan', fn: etherscanFn });
+  }
+
+  if (sources.length === 0) {
+    sources.push({
+      name: 'No source',
+      fn: () => Promise.reject(new Error(
+        'No data source configured. Set an Etherscan API key (set_etherscan_key) or connect a JSON-RPC node (set_node_url).'
+      )),
+    });
+  }
+
+  return sources;
+}
+
+export async function getBalance(address: string): Promise<OnChainResult<string>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getBalance(address),
+      () => etherscan.getBalance(address)
+    ),
+  });
+  return { result, source };
+}
+
+export async function getBlockNumber(): Promise<OnChainResult<number>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getBlockNumber(),
+      () => etherscan.getBlockNumber()
+    ),
+  });
+  return { result, source };
+}
+
+export async function getBlock(
+  blockNumber: string | number,
+  fullTx: boolean = false,
+  chain?: string
+): Promise<OnChainResult<any>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getBlockByNumber(blockNumber, fullTx),
+      () => etherscan.getBlockByNumber(blockNumber, fullTx, false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function getTransaction(txhash: string, chain?: string): Promise<OnChainResult<any>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getTransactionByHash(txhash),
+      () => etherscan.getTransactionByHash(txhash, false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function getTransactionReceipt(txhash: string, chain?: string): Promise<OnChainResult<any>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getTransactionReceipt(txhash),
+      () => etherscan.getTransactionReceipt(txhash, false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function onChainEthCall(
+  to: string,
+  data: string,
+  tag: string = 'latest',
+  chain?: string
+): Promise<OnChainResult<string>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.ethCall(to, data, tag),
+      () => etherscan.ethCall(to, data, tag, false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function getCode(address: string, chain?: string): Promise<OnChainResult<string>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getCode(address),
+      () => etherscan.getCode(address, 'latest', false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function getStorageAt(
+  address: string,
+  position: string,
+  chain?: string
+): Promise<OnChainResult<string>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getStorageAt(address, position),
+      () => etherscan.getStorageAt(address, position, 'latest', false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function onChainEstimateGas(
+  to: string,
+  data: string,
+  value: string = '0x0',
+  chain?: string
+): Promise<OnChainResult<string>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.estimateGas(to, data, value),
+      () => etherscan.estimateGas(to, data, value, false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function getGasPrice(): Promise<OnChainResult<any>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getGasPrice(),
+      () => etherscan.getGasPrice()
+    ),
+  });
+  return { result, source };
+}
+
+export async function onChainGetLogs(
+  address: string,
+  fromBlock: number | string = 0,
+  toBlock: number | string = 'latest',
+  topic0?: string,
+  topic1?: string,
+  topic2?: string,
+  topic3?: string,
+  chain?: string
+): Promise<OnChainResult<any[]>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getLogs(address, fromBlock, toBlock, topic0, topic1, topic2, topic3),
+      () => etherscan.getLogs(address, fromBlock, toBlock, topic0, topic1, topic2, topic3, false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function onChainGetTransactionCount(
+  address: string,
+  chain?: string
+): Promise<OnChainResult<number>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getTransactionCount(address),
+      () => etherscan.getTransactionCount(address, 'latest', false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+export async function onChainGetBalanceMulti(
+  addresses: string[],
+  chain?: string
+): Promise<OnChainResult<any[]>> {
+  const { result, source } = await executeWithFallback({
+    sources: onChainSources(
+      () => jsonrpc.getBalanceMulti(addresses),
+      () => etherscan.getBalanceMulti(addresses, false, chain),
+      chain
+    ),
+  });
+  return { result, source };
+}
+
+// ============================================
 // HEALTH CHECK
 // ============================================
 
@@ -424,7 +651,16 @@ export interface HealthStatus {
 }
 
 export async function checkHealth(): Promise<HealthStatus[]> {
-  const checks = [
+  const checks: Array<{ source: string; fn: () => Promise<any> }> = [];
+
+  if (jsonrpc.isConfigured()) {
+    checks.push({
+      source: 'jsonrpc',
+      fn: () => jsonrpc.getBlockNumber(),
+    });
+  }
+
+  checks.push(
     {
       source: 'etherscan',
       fn: () => etherscan.getBlockNumber(),
@@ -445,7 +681,7 @@ export async function checkHealth(): Promise<HealthStatus[]> {
       source: 'blobscan',
       fn: () => blobscan.getLatestBlock(),
     },
-  ];
+  );
 
   const results: HealthStatus[] = [];
 

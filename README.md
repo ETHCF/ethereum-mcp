@@ -68,12 +68,15 @@ open ~/Library/Application\ Support/Claude/claude_desktop_config.json
       "command": "node",
       "args": ["/Users/YOUR_USERNAME/.ethereum-mcp/dist/index.js"],
       "env": {
-        "ETHERSCAN_API_KEY": "your-key-here"
+        "ETHERSCAN_API_KEY": "your-key-here",
+        "ETH_NODE_URL": "http://localhost:8545"
       }
     }
   }
 }
 ```
+
+`ETH_NODE_URL` is optional. If set, on-chain queries (balances, blocks, transactions, gas, logs) use your node as primary source with Etherscan as fallback. You can also set it at runtime with `set_node_url`.
 
 4. Restart Claude Desktop.
 
@@ -117,18 +120,20 @@ Use `list_chains` to see all or `set_chain` to switch the default.
 
 ## Data Sources
 
-| Source     | What It Covers                                                      | API Key             |
-| ---------- | ------------------------------------------------------------------- | ------------------- |
-| Etherscan  | 60+ chains: balances, transactions, tokens, contracts, logs, blocks | Free (required)     |
-| DefiLlama  | TVL, yields, stablecoins, DEX volumes, options, fees, prices        | None (Pro optional) |
-| CoinGecko  | Token prices, exchanges, derivatives, NFTs, categories              | None (Pro optional) |
-| growthepie | L2 metrics, fees, activity                                          | None                |
-| Blobscan   | EIP-4844 blob data                                                  | None                |
-| Dune       | Custom queries                                                      | Free (optional)     |
+| Source       | What It Covers                                                      | API Key             |
+| ------------ | ------------------------------------------------------------------- | ------------------- |
+| Etherscan    | 60+ chains: balances, transactions, tokens, contracts, logs, blocks | Free (required)     |
+| JSON-RPC     | Local/self-hosted node: balances, blocks, txs, gas, logs, storage   | None (optional)     |
+| DefiLlama    | TVL, yields, stablecoins, DEX volumes, options, fees, prices        | None (Pro optional) |
+| CoinGecko    | Token prices, exchanges, derivatives, NFTs, categories              | None (Pro optional) |
+| growthepie   | L2 metrics, fees, activity                                          | None                |
+| Blobscan     | EIP-4844 blob data                                                  | None                |
+| Dune         | Custom queries                                                      | Free (optional)     |
 
 Get your API keys:
 
 - Etherscan: [etherscan.io/apis](https://etherscan.io/apis) (free, required)
+- JSON-RPC: No key needed. Set `ETH_NODE_URL` env var or use `set_node_url` at runtime
 - DefiLlama Pro: [defillama.com/subscription](https://defillama.com/subscription) (optional, unlocks 19 extra tools)
 - CoinGecko Pro: [coingecko.com/api/pricing](https://coingecko.com/api/pricing) (optional, higher rate limits + 5 extra tools)
 - Dune: [dune.com/settings/api](https://dune.com/settings/api) (free, optional)
@@ -143,7 +148,7 @@ Get your API keys:
 
 ---
 
-## Tools (152 total)
+## Tools (153 total)
 
 ### Etherscan (43 tools)
 
@@ -223,6 +228,14 @@ Get your API keys:
 |------|-------------|
 | `list_chains` | List all 60+ supported chains |
 | `set_chain` | Switch default blockchain |
+
+### JSON-RPC Node (1 tool)
+
+Connect a local or self-hosted Ethereum node. When configured, on-chain queries use the node as primary source with Etherscan as fallback. The node's chain is auto-detected and cross-chain queries route to the correct source.
+
+| Tool | Description |
+|------|-------------|
+| `set_node_url` | Connect to a JSON-RPC node (validates connection, detects chain) |
 
 ### DefiLlama (42 tools)
 
